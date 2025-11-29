@@ -136,25 +136,67 @@
       padding: 20px;
       overflow-y: auto;
     }
-    .code-textarea {
+    .code-editor-container {
+      position: relative;
       width: 100%;
       height: 100%;
       min-height: 500px;
-      background: #1e1e1e;
       border: 1px solid #3a3a3a;
-      color: #e0e0e0;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .code-editor-container:focus-within {
+      border-color: #4ade80;
+    }
+    .code-textarea {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      border: none;
+      color: transparent;
+      caret-color: #4ade80;
       padding: 16px;
       font-family: 'Courier New', Consolas, 'Lucida Console', monospace;
       font-size: 14px;
       line-height: 1.6;
-      border-radius: 8px;
       resize: none;
       tab-size: 2;
+      z-index: 2;
+      overflow: auto;
     }
     .code-textarea:focus {
       outline: none;
-      border-color: #4ade80;
     }
+    .code-highlight {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      padding: 16px;
+      font-family: 'Courier New', Consolas, 'Lucida Console', monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      z-index: 1;
+      overflow: auto;
+      pointer-events: none;
+      background: #1e1e1e;
+    }
+    .keyword { color: #c586c0; }
+    .string { color: #ce9178; }
+    .comment { color: #6a9955; font-style: italic; }
+    .number { color: #b5cea8; }
+    .function { color: #dcdcaa; }
+    .operator { color: #d4d4d4; }
+    .property { color: #9cdcfe; }
+    .constant { color: #4fc1ff; }
+    .tag { color: #569cd6; }
+    .punctuation { color: #d4d4d4; }
     .status-bar {
       background: #2a2a2a;
       border-top: 1px solid #3a3a3a;
@@ -417,15 +459,35 @@ npx sequential-ecosystem run my-task --input '{"userId":"123"}'
           </div>
         `;
       } else {
-        content.innerHTML = `<textarea class="code-textarea" id="codeArea" spellcheck="false">${file.content}</textarea>`;
+        content.innerHTML = `
+          <div class="code-editor-container">
+            <div class="code-highlight" id="codeHighlight"></div>
+            <textarea class="code-textarea" id="codeArea" spellcheck="false">${file.content}</textarea>
+          </div>
+        `;
         const textarea = document.getElementById('codeArea');
+        const highlight = document.getElementById('codeHighlight');
+
+        const updateHighlight = () => {
+          highlight.innerHTML = syntaxHighlight(textarea.value, file.type);
+          syncScroll();
+        };
+
+        const syncScroll = () => {
+          highlight.scrollTop = textarea.scrollTop;
+          highlight.scrollLeft = textarea.scrollLeft;
+        };
+
         textarea.addEventListener('input', () => {
           file.content = textarea.value;
           file.modified = true;
+          updateHighlight();
           renderTabs();
           updateStatus();
         });
+        textarea.addEventListener('scroll', syncScroll);
         textarea.addEventListener('keydown', handleKeydown);
+        updateHighlight();
         updateStatus();
       }
     }
@@ -531,6 +593,68 @@ npx sequential-ecosystem run my-task --input '{"userId":"123"}'
 
     function refreshTree() {
       alert('Refresh would reload the file tree from the server');
+    }
+
+    function syntaxHighlight(code, fileType) {
+      const escape = (str) => str.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+      if (fileType === 'js' || fileType === 'jsx' || fileType === 'ts' || fileType === 'tsx') {
+        return highlightJavaScript(code);
+      } else if (fileType === 'json') {
+        return highlightJSON(code);
+      } else if (fileType === 'md' || fileType === 'markdown') {
+        return highlightMarkdown(code);
+      } else {
+        return escape(code);
+      }
+    }
+
+    function highlightJavaScript(code) {
+      const keywords = /\b(const|let|var|function|async|await|return|if|else|for|while|do|switch|case|break|continue|import|export|from|default|class|extends|new|this|super|try|catch|finally|throw|typeof|instanceof|void|delete|in|of|yield|static|get|set|constructor|null|undefined|true|false)\b/g;
+      const strings = /(["'`])(?:(?=(\\?))\2.)*?\1/g;
+      const comments = /(\/\/.*$|\/\*[\s\S]*?\*\/)/gm;
+      const numbers = /\b(\d+\.?\d*)\b/g;
+      const functions = /\b([a-zA-Z_$][\w$]*)\s*(?=\()/g;
+      const operators = /([+\-*/%=<>!&|^~?:])/g;
+
+      return code
+        .replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(comments, '<span class="comment">$1</span>')
+        .replace(strings, '<span class="string">$1</span>')
+        .replace(keywords, '<span class="keyword">$1</span>')
+        .replace(numbers, '<span class="number">$1</span>')
+        .replace(functions, '<span class="function">$1</span>');
+    }
+
+    function highlightJSON(code) {
+      const strings = /(["'])(?:(?=(\\?))\2.)*?\1/g;
+      const numbers = /\b(-?\d+\.?\d*([eE][+-]?\d+)?)\b/g;
+      const booleans = /\b(true|false|null)\b/g;
+      const properties = /("(?:[^"\\]|\\.)*")(\s*:)/g;
+
+      return code
+        .replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(properties, '<span class="property">$1</span>$2')
+        .replace(strings, '<span class="string">$1</span>')
+        .replace(numbers, '<span class="number">$1</span>')
+        .replace(booleans, '<span class="constant">$1</span>');
+    }
+
+    function highlightMarkdown(code) {
+      const headings = /^(#{1,6})\s+(.*)$/gm;
+      const codeBlocks = /```[\s\S]*?```/g;
+      const inlineCode = /`([^`]+)`/g;
+      const bold = /\*\*([^*]+)\*\*/g;
+      const italic = /\*([^*]+)\*/g;
+      const links = /\[([^\]]+)\]\(([^)]+)\)/g;
+
+      return code
+        .replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(codeBlocks, '<span class="string">$&</span>')
+        .replace(headings, '<span class="keyword">$1</span> <span class="function">$2</span>')
+        .replace(inlineCode, '<span class="string">$&</span>')
+        .replace(bold, '<span class="keyword">$&</span>')
+        .replace(links, '<span class="tag">$&</span>');
     }
 
     renderTabs();
