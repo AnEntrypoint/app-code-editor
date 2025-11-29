@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Code Editor</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      background: #1a1a1a;
+      color: #e0e0e0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .header {
+      background: #2a2a2a;
+      padding: 12px 16px;
+      border-bottom: 1px solid #3a3a3a;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .title { font-weight: bold; color: #4ade80; font-size: 16px; }
+    .toolbar {
+      display: flex;
+      gap: 8px;
+    }
+    .toolbar button {
+      background: #3a3a3a;
+      border: none;
+      color: #e0e0e0;
+      padding: 6px 14px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .toolbar button:hover { background: #4a4a4a; }
+    .toolbar button.primary {
+      background: #4ade80;
+      color: #1a1a1a;
+    }
+    .toolbar button.primary:hover { background: #22c55e; }
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    .file-tree {
+      width: 280px;
+      background: #242424;
+      border-right: 1px solid #3a3a3a;
+      overflow-y: auto;
+      padding: 12px;
+    }
+    .tree-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px;
+      margin-bottom: 12px;
+    }
+    .tree-header h3 {
+      color: #4ade80;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .tree-actions button {
+      background: transparent;
+      border: none;
+      color: #999;
+      cursor: pointer;
+      padding: 4px 8px;
+      font-size: 14px;
+    }
+    .tree-actions button:hover { color: #4ade80; }
+    .folder, .file {
+      padding: 6px 12px;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 2px 0;
+    }
+    .folder:hover, .file:hover { background: #2a2a2a; }
+    .file.active { background: #3a3a3a; color: #4ade80; }
+    .folder-icon, .file-icon {
+      font-size: 14px;
+      width: 16px;
+    }
+    .folder-content {
+      padding-left: 20px;
+    }
+    .folder.collapsed .folder-content { display: none; }
+    .editor-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: #1e1e1e;
+    }
+    .tabs-container {
+      display: flex;
+      background: #252525;
+      border-bottom: 1px solid #3a3a3a;
+      overflow-x: auto;
+    }
+    .tab {
+      padding: 10px 16px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+    .tab:hover { background: #2a2a2a; }
+    .tab.active {
+      border-bottom-color: #4ade80;
+      background: #1e1e1e;
+    }
+    .tab-close {
+      margin-left: 8px;
+      opacity: 0.6;
+      font-size: 14px;
+    }
+    .tab-close:hover { opacity: 1; color: #ff5f56; }
+    .editor-content {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    .code-textarea {
+      width: 100%;
+      height: 100%;
+      min-height: 500px;
+      background: #1e1e1e;
+      border: 1px solid #3a3a3a;
+      color: #e0e0e0;
+      padding: 16px;
+      font-family: 'Courier New', Consolas, 'Lucida Console', monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      border-radius: 8px;
+      resize: none;
+      tab-size: 2;
+    }
+    .code-textarea:focus {
+      outline: none;
+      border-color: #4ade80;
+    }
+    .status-bar {
+      background: #2a2a2a;
+      border-top: 1px solid #3a3a3a;
+      padding: 6px 16px;
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .status-item {
+      display: flex;
+      gap: 16px;
+    }
+    .status-item span {
+      color: #999;
+    }
+    .search-bar {
+      background: #2a2a2a;
+      padding: 12px 16px;
+      border-bottom: 1px solid #3a3a3a;
+      display: flex;
+      gap: 8px;
+    }
+    .search-bar input {
+      flex: 1;
+      background: #1e1e1e;
+      border: 1px solid #3a3a3a;
+      color: #e0e0e0;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+    .search-bar input:focus {
+      outline: none;
+      border-color: #4ade80;
+    }
+    .modified-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ffbd2e;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">💻 Code Editor</div>
+    <div class="toolbar">
+      <button onclick="newFile()">New File</button>
+      <button onclick="saveFile()" class="primary">Save</button>
+      <button onclick="saveAll()">Save All</button>
+      <button onclick="toggleSearch()">Find</button>
+    </div>
+  </div>
+  <div class="search-bar" id="searchBar" style="display: none;">
+    <input type="text" placeholder="Search in files..." id="searchInput" />
+    <button class="toolbar button" onclick="searchFiles()">Search</button>
+    <button class="toolbar button" onclick="toggleSearch()">✕</button>
+  </div>
+  <div class="main">
+    <div class="file-tree">
+      <div class="tree-header">
+        <h3>Files</h3>
+        <div class="tree-actions">
+          <button onclick="newFile()" title="New File">📄</button>
+          <button onclick="newFolder()" title="New Folder">📁</button>
+          <button onclick="refreshTree()" title="Refresh">↻</button>
+        </div>
+      </div>
+      <div id="treeContent">
+        <div class="folder" onclick="toggleFolder(this)">
+          <span class="folder-icon">📁</span>
+          <span>tasks</span>
+          <div class="folder-content">
+            <div class="file" onclick="openFile(event, 'tasks/example-simple.js')">
+              <span class="file-icon">📄</span>
+              <span>example-simple.js</span>
+            </div>
+            <div class="file" onclick="openFile(event, 'tasks/example-flow.js')">
+              <span class="file-icon">📄</span>
+              <span>example-flow.js</span>
+            </div>
+            <div class="file" onclick="openFile(event, 'tasks/config.json')">
+              <span class="file-icon">📋</span>
+              <span>config.json</span>
+            </div>
+          </div>
+        </div>
+        <div class="folder" onclick="toggleFolder(this)">
+          <span class="folder-icon">📁</span>
+          <span>lib</span>
+          <div class="folder-content">
+            <div class="file" onclick="openFile(event, 'lib/utils.js')">
+              <span class="file-icon">📄</span>
+              <span>utils.js</span>
+            </div>
+            <div class="file" onclick="openFile(event, 'lib/api.js')">
+              <span class="file-icon">📄</span>
+              <span>api.js</span>
+            </div>
+          </div>
+        </div>
+        <div class="file" onclick="openFile(event, 'package.json')">
+          <span class="file-icon">📋</span>
+          <span>package.json</span>
+        </div>
+        <div class="file" onclick="openFile(event, 'README.md')">
+          <span class="file-icon">📝</span>
+          <span>README.md</span>
+        </div>
+      </div>
+    </div>
+    <div class="editor-area">
+      <div class="tabs-container" id="tabsContainer">
+        <div class="tab active" onclick="switchToTab('welcome')">
+          Welcome
+          <span class="tab-close" onclick="closeTab(event, 'welcome')">×</span>
+        </div>
+      </div>
+      <div class="editor-content" id="editorContent">
+        <div style="text-align: center; padding: 60px 40px; color: #666;">
+          <h2 style="color: #4ade80; margin-bottom: 20px; font-size: 28px;">Welcome to Code Editor</h2>
+          <p style="font-size: 16px; margin-bottom: 30px;">Your comprehensive development environment for Sequential ecosystem</p>
+          <div style="background: #242424; border-radius: 12px; padding: 30px; max-width: 600px; margin: 0 auto;">
+            <h3 style="color: #e0e0e0; margin-bottom: 16px;">Quick Start</h3>
+            <ul style="text-align: left; list-style: none; padding: 0;">
+              <li style="padding: 8px 0; border-bottom: 1px solid #3a3a3a;">📄 Click a file in the tree to open it</li>
+              <li style="padding: 8px 0; border-bottom: 1px solid #3a3a3a;">💾 Ctrl+S to save current file</li>
+              <li style="padding: 8px 0; border-bottom: 1px solid #3a3a3a;">🔍 Use Find to search across files</li>
+              <li style="padding: 8px 0;">📁 Right-click tree for more options</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="status-bar">
+        <div class="status-item">
+          <span id="currentFile">Welcome</span>
+          <span id="lineCol">Line 1, Col 1</span>
+          <span id="fileType">Markdown</span>
+        </div>
+        <div class="status-item">
+          <span id="encoding">UTF-8</span>
+          <span id="modified" style="display: none;">
+            <span class="modified-indicator"></span> Modified
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let openFiles = {
+      'welcome': { name: 'Welcome', content: '', type: 'md', modified: false }
+    };
+    let currentFile = 'welcome';
+
+    const fileContents = {
+      'tasks/example-simple.js': `export async function myTask(input) {
+  const response = await fetch('https://api.example.com/data');
+  const data = await response.json();
+  return { success: true, data };
+}`,
+      'tasks/example-flow.js': `export const graph = {
+  id: 'example-flow',
+  initial: 'fetchData',
+  states: {
+    fetchData: { onDone: 'process', onError: 'handleError' },
+    process: { onDone: 'complete' },
+    handleError: { type: 'final' },
+    complete: { type: 'final' }
+  }
+};
+
+export async function fetchData(input) {
+  return await __callHostTool__('api', 'getData', { id: input.userId });
+}`,
+      'tasks/config.json': `{
+  "name": "my-task",
+  "runner": "sequential-js",
+  "inputs": [
+    { "name": "userId", "type": "string" }
+  ]
+}`,
+      'lib/utils.js': `export function formatDate(date) {
+  return new Date(date).toISOString();
+}
+
+export function validateInput(input) {
+  return input && typeof input === 'object';
+}`,
+      'package.json': `{
+  "name": "sequential-project",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "sequential-fetch": "latest"
+  }
+}`,
+      'README.md': `# Sequential Project
+
+This is a Sequential ecosystem project.
+
+## Features
+
+- Auto-pause on HTTP calls
+- State-based workflow execution
+- Content-addressable filesystem
+
+## Usage
+
+\`\`\`bash
+npx sequential-ecosystem run my-task --input '{"userId":"123"}'
+\`\`\``
+    };
+
+    function openFile(event, path) {
+      event.stopPropagation();
+
+      document.querySelectorAll('.file').forEach(f => f.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+
+      if (!openFiles[path]) {
+        const fileName = path.split('/').pop();
+        const fileType = fileName.split('.').pop();
+        openFiles[path] = {
+          name: fileName,
+          content: fileContents[path] || `// ${fileName}\n\n// Edit your code here`,
+          type: fileType,
+          modified: false,
+          path: path
+        };
+      }
+
+      currentFile = path;
+      renderTabs();
+      renderEditor();
+    }
+
+    function renderTabs() {
+      const container = document.getElementById('tabsContainer');
+      container.innerHTML = Object.entries(openFiles).map(([path, file]) => `
+        <div class="tab ${path === currentFile ? 'active' : ''}" onclick="switchToTab('${path}')">
+          ${file.modified ? '<span class="modified-indicator"></span>' : ''}
+          ${file.name}
+          <span class="tab-close" onclick="closeTab(event, '${path}')">×</span>
+        </div>
+      `).join('');
+    }
+
+    function renderEditor() {
+      const file = openFiles[currentFile];
+      const content = document.getElementById('editorContent');
+
+      if (currentFile === 'welcome') {
+        content.innerHTML = `
+          <div style="text-align: center; padding: 60px 40px; color: #666;">
+            <h2 style="color: #4ade80; margin-bottom: 20px;">Welcome to Code Editor</h2>
+            <p style="margin-bottom: 30px;">Select a file from the tree to start editing</p>
+          </div>
+        `;
+      } else {
+        content.innerHTML = `<textarea class="code-textarea" id="codeArea" spellcheck="false">${file.content}</textarea>`;
+        const textarea = document.getElementById('codeArea');
+        textarea.addEventListener('input', () => {
+          file.content = textarea.value;
+          file.modified = true;
+          renderTabs();
+          updateStatus();
+        });
+        textarea.addEventListener('keydown', handleKeydown);
+        updateStatus();
+      }
+    }
+
+    function handleKeydown(e) {
+      if (e.ctrlKey && e.key === 's') {
+        e.preventDefault();
+        saveFile();
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = e.target.selectionStart;
+        const end = e.target.selectionEnd;
+        e.target.value = e.target.value.substring(0, start) + '  ' + e.target.value.substring(end);
+        e.target.selectionStart = e.target.selectionEnd = start + 2;
+      }
+    }
+
+    function updateStatus() {
+      const file = openFiles[currentFile];
+      document.getElementById('currentFile').textContent = file.path || file.name;
+      document.getElementById('fileType').textContent = file.type.toUpperCase();
+      document.getElementById('modified').style.display = file.modified ? 'block' : 'none';
+    }
+
+    function switchToTab(path) {
+      currentFile = path;
+      renderTabs();
+      renderEditor();
+    }
+
+    function closeTab(event, path) {
+      event.stopPropagation();
+      if (openFiles[path].modified) {
+        if (!confirm(`Save changes to ${openFiles[path].name}?`)) {
+          return;
+        }
+      }
+      delete openFiles[path];
+      if (currentFile === path) {
+        currentFile = Object.keys(openFiles)[0] || 'welcome';
+      }
+      renderTabs();
+      renderEditor();
+    }
+
+    function saveFile() {
+      if (currentFile === 'welcome') return;
+      const file = openFiles[currentFile];
+      file.modified = false;
+      renderTabs();
+      updateStatus();
+      console.log('Saved:', file.path);
+      alert(`Saved ${file.name}`);
+    }
+
+    function saveAll() {
+      Object.values(openFiles).forEach(file => {
+        if (file.modified) {
+          file.modified = false;
+        }
+      });
+      renderTabs();
+      updateStatus();
+      alert('All files saved!');
+    }
+
+    function newFile() {
+      const name = prompt('File name:');
+      if (name) {
+        openFiles[name] = {
+          name: name,
+          content: '',
+          type: name.split('.').pop() || 'txt',
+          modified: true,
+          path: name
+        };
+        currentFile = name;
+        renderTabs();
+        renderEditor();
+      }
+    }
+
+    function toggleFolder(el) {
+      el.classList.toggle('collapsed');
+    }
+
+    function toggleSearch() {
+      const bar = document.getElementById('searchBar');
+      bar.style.display = bar.style.display === 'none' ? 'flex' : 'none';
+      if (bar.style.display === 'flex') {
+        document.getElementById('searchInput').focus();
+      }
+    }
+
+    function searchFiles() {
+      const query = document.getElementById('searchInput').value;
+      alert(`Searching for: ${query}\n(Full search implementation would go here)`);
+    }
+
+    function newFolder() {
+      alert('New folder functionality would create a folder in the file tree');
+    }
+
+    function refreshTree() {
+      alert('Refresh would reload the file tree from the server');
+    }
+
+    renderTabs();
+    renderEditor();
+  </script>
+</body>
+</html>

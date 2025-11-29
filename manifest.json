@@ -1,0 +1,20 @@
+{
+  "id": "app-code-editor",
+  "name": "Code Editor",
+  "version": "1.0.0",
+  "description": "Full IDE with file tree and multi-tab editing",
+  "icon": "💻",
+  "entry": "dist/index.html",
+  "capabilities": ["sequential-os", "zellous"],
+  "dependencies": {
+    "@sequential/zellous-client-sdk": "^1.0.0"
+  },
+  "window": {
+    "defaultWidth": 1300,
+    "defaultHeight": 850,
+    "minWidth": 800,
+    "minHeight": 600,
+    "resizable": true,
+    "maximizable": true
+  }
+}
