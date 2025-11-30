@@ -144,9 +144,28 @@
       border: 1px solid #3a3a3a;
       border-radius: 8px;
       overflow: hidden;
+      display: flex;
     }
     .code-editor-container:focus-within {
       border-color: #4ade80;
+    }
+    .line-numbers {
+      background: #252525;
+      color: #666;
+      padding: 16px 8px;
+      font-family: 'Courier New', Consolas, 'Lucida Console', monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      text-align: right;
+      user-select: none;
+      border-right: 1px solid #3a3a3a;
+      overflow: hidden;
+      min-width: 50px;
+    }
+    .editor-wrapper {
+      position: relative;
+      flex: 1;
+      overflow: hidden;
     }
     .code-textarea {
       position: absolute;
@@ -217,8 +236,17 @@
       background: #2a2a2a;
       padding: 12px 16px;
       border-bottom: 1px solid #3a3a3a;
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .search-bar.active {
+      display: flex;
+    }
+    .search-row {
       display: flex;
       gap: 8px;
+      align-items: center;
     }
     .search-bar input {
       flex: 1;
@@ -233,6 +261,31 @@
       outline: none;
       border-color: #4ade80;
     }
+    .search-bar button {
+      background: #3a3a3a;
+      border: none;
+      color: #e0e0e0;
+      padding: 8px 14px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .search-bar button:hover {
+      background: #4a4a4a;
+    }
+    .search-bar button.primary {
+      background: #4ade80;
+      color: #1a1a1a;
+    }
+    .search-bar button.primary:hover {
+      background: #22c55e;
+    }
+    .search-info {
+      font-size: 11px;
+      color: #999;
+      padding: 0 4px;
+    }
     .modified-indicator {
       width: 8px;
       height: 8px;
@@ -240,9 +293,18 @@
       background: #ffbd2e;
       display: inline-block;
     }
+    .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 2000; }
+    .toast { padding: 12px 16px; margin-bottom: 8px; border-radius: 4px; font-size: 13px; max-width: 300px; word-wrap: break-word; animation: slideIn 0.3s ease-out; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+    @keyframes slideIn { from { transform: translateX(350px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes slideOut { to { transform: translateX(350px); opacity: 0; } }
+    .toast.success { background: #4caf50; color: white; }
+    .toast.error { background: #f48771; color: white; }
+    .toast.warning { background: #ff9800; color: white; }
+    .toast.info { background: #2196F3; color: white; }
   </style>
 </head>
 <body>
+  <div class="toast-container" id="toastContainer"></div>
   <div class="header">
     <div class="title">💻 Code Editor</div>
     <div class="toolbar">
@@ -252,10 +314,20 @@
       <button onclick="toggleSearch()">Find</button>
     </div>
   </div>
-  <div class="search-bar" id="searchBar" style="display: none;">
-    <input type="text" placeholder="Search in files..." id="searchInput" />
-    <button class="toolbar button" onclick="searchFiles()">Search</button>
-    <button class="toolbar button" onclick="toggleSearch()">✕</button>
+  <div class="search-bar" id="searchBar">
+    <div class="search-row">
+      <input type="text" placeholder="Find..." id="findInput" />
+      <button onclick="findNext()">Next</button>
+      <button onclick="findPrevious()">Previous</button>
+      <span class="search-info" id="findInfo"></span>
+      <button onclick="toggleReplace()" id="replaceToggle">Replace</button>
+      <button onclick="toggleSearch()">✕</button>
+    </div>
+    <div class="search-row" id="replaceRow" style="display: none;">
+      <input type="text" placeholder="Replace with..." id="replaceInput" />
+      <button onclick="replaceNext()" class="primary">Replace</button>
+      <button onclick="replaceAll()" class="primary">Replace All</button>
+    </div>
   </div>
   <div class="main">
     <div class="file-tree">
@@ -349,6 +421,7 @@
   </div>
 
   <script>
+    function showToast(message, type = "info", duration = 3000) { const c = document.getElementById("toastContainer"); if (!c) return; const t = document.createElement("div"); t.className = `toast ${type}`; t.textContent = message; c.appendChild(t); setTimeout(() => { t.style.animation = "slideOut 0.3s ease-out forwards"; setTimeout(() => t.remove(), 300); }, duration); } function showError(message) { showToast(message, "error"); } function showSuccess(message) { showToast(message, "success"); } function showWarning(message) { showToast(message, "warning"); }
     let openFiles = {
       'welcome': { name: 'Welcome', content: '', type: 'md', modified: false }
     };
@@ -461,21 +534,32 @@ npx sequential-ecosystem run my-task --input '{"userId":"123"}'
       } else {
         content.innerHTML = `
           <div class="code-editor-container">
-            <div class="code-highlight" id="codeHighlight"></div>
-            <textarea class="code-textarea" id="codeArea" spellcheck="false">${file.content}</textarea>
+            <div class="line-numbers" id="lineNumbers"></div>
+            <div class="editor-wrapper">
+              <div class="code-highlight" id="codeHighlight"></div>
+              <textarea class="code-textarea" id="codeArea" spellcheck="false">${file.content}</textarea>
+            </div>
           </div>
         `;
         const textarea = document.getElementById('codeArea');
         const highlight = document.getElementById('codeHighlight');
+        const lineNumbers = document.getElementById('lineNumbers');
+
+        const updateLineNumbers = () => {
+          const lines = textarea.value.split('\n');
+          lineNumbers.innerHTML = lines.map((_, i) => `${i + 1}\n`).join('');
+        };
 
         const updateHighlight = () => {
           highlight.innerHTML = syntaxHighlight(textarea.value, file.type);
+          updateLineNumbers();
           syncScroll();
         };
 
         const syncScroll = () => {
           highlight.scrollTop = textarea.scrollTop;
           highlight.scrollLeft = textarea.scrollLeft;
+          lineNumbers.scrollTop = textarea.scrollTop;
         };
 
         textarea.addEventListener('input', () => {
@@ -496,6 +580,15 @@ npx sequential-ecosystem run my-task --input '{"userId":"123"}'
       if (e.ctrlKey && e.key === 's') {
         e.preventDefault();
         saveFile();
+      } else if (e.ctrlKey && e.key === 'f') {
+        e.preventDefault();
+        toggleSearch();
+        document.getElementById('findInput').focus();
+      } else if (e.ctrlKey && e.key === 'h') {
+        e.preventDefault();
+        toggleSearch();
+        toggleReplace();
+        document.getElementById('findInput').focus();
       } else if (e.key === 'Tab') {
         e.preventDefault();
         const start = e.target.selectionStart;
@@ -533,25 +626,59 @@ npx sequential-ecosystem run my-task --input '{"userId":"123"}'
       renderEditor();
     }
 
-    function saveFile() {
+    async function saveFile() {
       if (currentFile === 'welcome') return;
       const file = openFiles[currentFile];
-      file.modified = false;
-      renderTabs();
-      updateStatus();
-      console.log('Saved:', file.path);
-      alert(`Saved ${file.name}`);
+      try {
+        const res = await fetch('/api/files/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: file.path, content: file.content })
+        });
+        const result = await res.json();
+        if (result.success) {
+          file.modified = false;
+          renderTabs();
+          updateStatus();
+          console.log('Saved:', file.path);
+          const statusEl = document.getElementById('currentFile');
+          const originalText = statusEl.textContent;
+          statusEl.textContent = `✓ Saved ${file.name}`;
+          statusEl.style.color = '#4ade80';
+          setTimeout(() => {
+            statusEl.textContent = originalText;
+            statusEl.style.color = '';
+          }, 2000);
+        } else {
+          showError(`Save failed: ${result.error}`);
+        }
+      } catch (error) {
+        showError(`Save error: ${error.message}`);
+      }
     }
 
-    function saveAll() {
-      Object.values(openFiles).forEach(file => {
-        if (file.modified) {
-          file.modified = false;
+    async function saveAll() {
+      const filesToSave = Object.values(openFiles).filter(f => f.modified && f.path);
+      let successCount = 0;
+      for (const file of filesToSave) {
+        try {
+          const res = await fetch('/api/files/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: file.path, content: file.content })
+          });
+          const result = await res.json();
+          if (result.success) {
+            file.modified = false;
+            successCount++;
+          }
+        } catch (error) {
+          console.error('Failed to save', file.path, error);
         }
-      });
+      }
       renderTabs();
       updateStatus();
-      alert('All files saved!');
+      showError(`Saved ${successCount} of ${filesToSave.length} files!`);
     }
 
     function newFile() {
@@ -574,25 +701,119 @@ npx sequential-ecosystem run my-task --input '{"userId":"123"}'
       el.classList.toggle('collapsed');
     }
 
+    let currentSearchIndex = 0;
+    let searchMatches = [];
+
     function toggleSearch() {
       const bar = document.getElementById('searchBar');
-      bar.style.display = bar.style.display === 'none' ? 'flex' : 'none';
-      if (bar.style.display === 'flex') {
-        document.getElementById('searchInput').focus();
+      bar.classList.toggle('active');
+      if (bar.classList.contains('active')) {
+        document.getElementById('findInput').focus();
+      } else {
+        document.getElementById('replaceRow').style.display = 'none';
       }
     }
 
-    function searchFiles() {
-      const query = document.getElementById('searchInput').value;
-      alert(`Searching for: ${query}\n(Full search implementation would go here)`);
+    function toggleReplace() {
+      const row = document.getElementById('replaceRow');
+      row.style.display = row.style.display === 'none' ? 'flex' : 'none';
     }
 
+    function findMatches() {
+      if (currentFile === 'welcome') return [];
+      const file = openFiles[currentFile];
+      const findText = document.getElementById('findInput').value;
+      if (!findText) return [];
+      const content = file.content;
+      const matches = [];
+      let index = 0;
+      while ((index = content.indexOf(findText, index)) !== -1) {
+        matches.push(index);
+        index += findText.length;
+      }
+      return matches;
+    }
+
+    function updateSearchInfo() {
+      searchMatches = findMatches();
+      const info = document.getElementById('findInfo');
+      if (searchMatches.length === 0) {
+        info.textContent = 'No matches';
+        currentSearchIndex = 0;
+      } else {
+        info.textContent = `${currentSearchIndex + 1} of ${searchMatches.length}`;
+      }
+    }
+
+    function selectMatch(index) {
+      if (searchMatches.length === 0) return;
+      const textarea = document.getElementById('codeArea');
+      if (!textarea) return;
+      const findText = document.getElementById('findInput').value;
+      const start = searchMatches[index];
+      textarea.focus();
+      textarea.setSelectionRange(start, start + findText.length);
+      textarea.scrollTop = Math.max(0, (start / textarea.value.length) * textarea.scrollHeight - 200);
+    }
+
+    function findNext() {
+      updateSearchInfo();
+      if (searchMatches.length === 0) return;
+      currentSearchIndex = (currentSearchIndex + 1) % searchMatches.length;
+      selectMatch(currentSearchIndex);
+      updateSearchInfo();
+    }
+
+    function findPrevious() {
+      updateSearchInfo();
+      if (searchMatches.length === 0) return;
+      currentSearchIndex = (currentSearchIndex - 1 + searchMatches.length) % searchMatches.length;
+      selectMatch(currentSearchIndex);
+      updateSearchInfo();
+    }
+
+    function replaceNext() {
+      if (currentFile === 'welcome') return;
+      const file = openFiles[currentFile];
+      const findText = document.getElementById('findInput').value;
+      const replaceText = document.getElementById('replaceInput').value;
+      if (!findText) return;
+      const index = file.content.indexOf(findText);
+      if (index !== -1) {
+        file.content = file.content.substring(0, index) + replaceText + file.content.substring(index + findText.length);
+        file.modified = true;
+        renderEditor();
+        updateSearchInfo();
+      }
+    }
+
+    function replaceAll() {
+      if (currentFile === 'welcome') return;
+      const file = openFiles[currentFile];
+      const findText = document.getElementById('findInput').value;
+      const replaceText = document.getElementById('replaceInput').value;
+      if (!findText) return;
+      const count = (file.content.match(new RegExp(findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+      if (count === 0) {
+        showError('No matches found');
+        return;
+      }
+      if (confirm(`Replace ${count} occurrences?`)) {
+        file.content = file.content.split(findText).join(replaceText);
+        file.modified = true;
+        renderEditor();
+        updateSearchInfo();
+      }
+    }
+
+    document.getElementById('findInput').addEventListener('input', updateSearchInfo);
+
     function newFolder() {
-      alert('New folder functionality would create a folder in the file tree');
+      showError('New folder functionality would create a folder in the file tree');
     }
 
     function refreshTree() {
-      alert('Refresh would reload the file tree from the server');
+      showError('Refresh would reload the file tree from the server');
     }
 
     function syntaxHighlight(code, fileType) {
