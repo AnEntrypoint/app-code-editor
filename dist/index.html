@@ -562,13 +562,20 @@ npx sequential-ecosystem run my-task --input '{"userId":"123"}'
       renderEditor();
     }
 
+    function escapeHtml(str) {
+      if (!str) return '';
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
     function renderTabs() {
       const container = document.getElementById('tabsContainer');
       container.innerHTML = Object.entries(openFiles).map(([path, file]) => `
-        <div class="tab ${path === currentFile ? 'active' : ''}" onclick="switchToTab('${path}')">
+        <div class="tab ${path === currentFile ? 'active' : ''}" onclick="switchToTab('${escapeHtml(path)}')">
           ${file.modified ? '<span class="modified-indicator"></span>' : ''}
-          ${file.name}
-          <span class="tab-close" onclick="closeTab(event, '${path}')">×</span>
+          ${escapeHtml(file.name)}
+          <span class="tab-close" onclick="closeTab(event, '${escapeHtml(path)}')">×</span>
         </div>
       `).join('');
     }
@@ -590,7 +597,7 @@ npx sequential-ecosystem run my-task --input '{"userId":"123"}'
             <div class="line-numbers" id="lineNumbers"></div>
             <div class="editor-wrapper">
               <div class="code-highlight" id="codeHighlight"></div>
-              <textarea class="code-textarea" id="codeArea" spellcheck="false">${file.content}</textarea>
+              <textarea class="code-textarea" id="codeArea" spellcheck="false">${escapeHtml(file.content)}</textarea>
             </div>
           </div>
         `;
@@ -933,6 +940,66 @@ npx sequential-ecosystem run my-task --input '{"userId":"123"}'
 
     renderTabs();
     renderEditor();
+  </script>
+
+  <div id="contextMenuContainer"></div>
+  <script>
+    class AppContextMenu {
+      constructor() {
+        this.items = [];
+      }
+      addItem(label, icon, action, disabled = false) {
+        this.items.push({ label, icon, action, disabled });
+        return this;
+      }
+      addDivider() {
+        this.items.push({ divider: true });
+        return this;
+      }
+      show(x, y) {
+        this.render(x, y);
+      }
+      render(x, y) {
+        const menu = document.createElement('div');
+        menu.style.cssText = 'position:fixed;background:#252526;border:1px solid #3c3c3c;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.5);z-index:10000;min-width:180px';
+        menu.style.left = x + 'px';
+        menu.style.top = y + 'px';
+        this.items.forEach(item => {
+          if (item.divider) {
+            const div = document.createElement('div');
+            div.style.cssText = 'height:1px;background:#3c3c3c';
+            menu.appendChild(div);
+          } else {
+            const el = document.createElement('div');
+            el.style.cssText = 'padding:8px 12px;color:#d4d4d4;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:8px';
+            el.innerHTML = item.icon + ' ' + item.label;
+            if (!item.disabled) {
+              el.onmouseover = () => el.style.background = '#3c3c3c';
+              el.onmouseout = () => el.style.background = 'transparent';
+              el.onclick = () => { item.action(); this.hide(); };
+            } else {
+              el.style.opacity = '0.5';
+              el.style.cursor = 'not-allowed';
+            }
+            menu.appendChild(el);
+          }
+        });
+        document.getElementById('contextMenuContainer')?.remove();
+        menu.id = 'contextMenuContainer';
+        document.body.appendChild(menu);
+      }
+      hide() {
+        document.getElementById('contextMenuContainer')?.remove();
+      }
+    }
+    const appContextMenu = new AppContextMenu();
+    document.addEventListener('click', () => appContextMenu.hide());
+  </script>
+
+  <script src="/error-handler.js"></script>
+  <script>
+    const errorHandler = new ErrorHandler('app-code-editor');
+    window.errorHandler = errorHandler;
   </script>
 </body>
 </html>
